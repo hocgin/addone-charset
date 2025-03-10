@@ -1,17 +1,26 @@
-/**
- * FH-Charset：网页编码集修改工具
- * @author zhaoxianlie
- */
+let resetEncoding = [
+    ['default', '默认/重置']
+];
+// 某Tab的编码都暂存一下，这是prefix
+const ENCODING_PREFIX = 'FE_ENCODING_PREFIX_';
+
+let Storage = {
+    getItem: async function (key) {
+        let object = await chrome.storage.local.get([key]) ?? [];
+        return object?.[key];
+    },
+    removeItem: async function (key) {
+        await chrome.storage.local.remove([key])
+    },
+    setItem: async function (key, value) {
+        await chrome.storage.local.set({[key]: value})
+    }
+}
+
 let PageEncoding = (() => {
 
-    // 某Tab的编码都暂存一下，这是prefix
-    const ENCODING_PREFIX = 'FE_ENCODING_PREFIX_';
     let listenerAddedFlag = false;
     let contextMenuId = null;
-
-    let resetEncoding = [
-        ['default', '默认/重置']
-    ];
 
     // 系统支持的编码列表
     let SystemCharsetList = [
@@ -41,18 +50,6 @@ let PageEncoding = (() => {
     // 菜单列表
     let menuMap = {};
 
-    let Storage = {
-        getItem: async function (key) {
-            let object = await chrome.storage.local.get([key]) ?? [];
-            return object?.[key];
-        },
-        removeItem: async function (key) {
-            await chrome.storage.local.remove([key])
-        },
-        setItem: async function (key, value) {
-            await chrome.storage.local.set({[key]: value})
-        }
-    }
 
     /**
      * 创建右键菜单
@@ -97,48 +94,6 @@ let PageEncoding = (() => {
                 checked: false,
                 parentId: contextMenuId,
             });
-        });
-        chrome.contextMenus.onClicked.addListener(async function (info, tab) {
-            let menuItemId = info?.menuItemId;
-            if (menuItemId === "addone-charset.all") {
-                await chrome.scripting.executeScript({
-                    target: {tabId: tab.id},
-                    func: (items) => {
-                        alert(`当前网页字符集是：${document.charset}`)
-                    },
-                    args: [] // pass any parameters to function
-                });
-                return;
-            }
-
-            let result = await chrome.scripting.executeScript({
-                target: {tabId: tab.id},
-                func: () => {
-                    return document.contentType
-                },
-                injectImmediately: false,
-                world: 'MAIN',
-                args: [] // pass any parameters to function
-            })
-            let contentType = result?.[0]?.result;
-
-            let targetEncoding = (() => {
-                let menus = menuItemId.split('.');
-                return menus[menus.length - 1]
-            })();
-
-            if (!info.wasChecked || targetEncoding === resetEncoding[0][0]) {
-                if (targetEncoding === resetEncoding[0][0]) {
-                    await Storage.removeItem(ENCODING_PREFIX + tab.id);
-                } else {
-                    await Storage.setItem(ENCODING_PREFIX + tab.id, targetEncoding);
-                }
-                await addOnlineSiteEncodingListener(contentType, tab.id, () => {
-                    chrome.tabs.reload(tab.id, {
-                        bypassCache: true
-                    });
-                });
-            }
         });
 
     };
@@ -246,6 +201,7 @@ let PageEncoding = (() => {
     });
 
     return {
+        addOnlineSiteEncodingListener,
         createMenu
     };
 
@@ -253,4 +209,46 @@ let PageEncoding = (() => {
 
 chrome.runtime.onInstalled.addListener(async () => {
     await PageEncoding.createMenu();
+});
+chrome.contextMenus.onClicked.addListener(async function (info, tab) {
+    let menuItemId = info?.menuItemId;
+    if (menuItemId === "addone-charset.all") {
+        await chrome.scripting.executeScript({
+            target: {tabId: tab.id},
+            func: (items) => {
+                alert(`当前网页字符集是：${document.charset}`)
+            },
+            args: [] // pass any parameters to function
+        });
+        return;
+    }
+
+    let result = await chrome.scripting.executeScript({
+        target: {tabId: tab.id},
+        func: () => {
+            return document.contentType
+        },
+        injectImmediately: false,
+        world: 'MAIN',
+        args: [] // pass any parameters to function
+    })
+    let contentType = result?.[0]?.result;
+
+    let targetEncoding = (() => {
+        let menus = menuItemId.split('.');
+        return menus[menus.length - 1]
+    })();
+
+    if (!info.wasChecked || targetEncoding === resetEncoding[0][0]) {
+        if (targetEncoding === resetEncoding[0][0]) {
+            await Storage.removeItem(ENCODING_PREFIX + tab.id);
+        } else {
+            await Storage.setItem(ENCODING_PREFIX + tab.id, targetEncoding);
+        }
+        await PageEncoding.addOnlineSiteEncodingListener(contentType, tab.id, () => {
+            chrome.tabs.reload(tab.id, {
+                bypassCache: true
+            });
+        });
+    }
 });
