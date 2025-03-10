@@ -1,8 +1,8 @@
 {
-  "name": "网页编码修改（Charset）",
-  "short_name":"FH-Charset",
-  "version": "2020.04.18",
-  "manifest_version": 2,
+  "name": "Charset",
+  "short_name":"Charset",
+  "version": "2025.03.10",
+  "manifest_version": 3,
   "description": "专用于网页编码的修改，支持全世界100多种字符集，比如：UTF-8、GBK、日文、韩文、西文等等！",
   "icons": {
     "16": "img/fe-16.png",
@@ -10,19 +10,22 @@
     "128": "img/fe-128.png"
   },
   "background": {
-    "persistent": true,
-    "scripts": [
-      "background.js"
-    ]
+    "type": "module",
+    "service_worker": "background.js"
   },
   "options_ui": {
     "page": "options/index.html",
     "open_in_tab": true
   },
-  "permissions": [ "activeTab", "webRequest", "webRequestBlocking", "contextMenus", "tabs" ],
-  "web_accessible_resources": [
-  ],
-  "content_security_policy": "script-src 'self' 'unsafe-eval';  object-src 'self' ;",
-  "update_url": "https://clients2.google.com/service/update2/crx",
-  "homepage_url": "https://www.baidufe.com/fehelper"
+  "permissions": [ "activeTab", "webRequest",
+    "declarativeNetRequest",
+    "declarativeNetRequestWithHostAccess",
+    "declarativeNetRequestFeedback",
+    "storage",
+    "contextMenus",
+    "tabs" ,
+    "scripting"],
+  "host_permissions": [
+    "<all_urls>"
+  ]
 }

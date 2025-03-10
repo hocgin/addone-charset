@@ -22,7 +22,7 @@ let watchPath = require('gulp-watch-path');
 let gcallback = require('gulp-callback');
 
 gulp.task('clean', () => {
-    return gulp.src('output', {read: false}).pipe(clean({force: true}));
+    return gulp.src('output', {read: false, allowEmpty: true}).pipe(clean({force: true}));
 });
 
 gulp.task('copy', () => {
@@ -150,6 +150,4 @@ gulp.task('zip', () => {
 });
 
 // builder
-gulp.task('default', ['clean'], () => {
-    runSequence(['copy', 'css', 'js', 'html', 'json'], 'zip');
-});
+gulp.task('default', gulp.series('clean', gulp.parallel('copy', 'css', 'js', 'html', 'json'), 'zip'));
