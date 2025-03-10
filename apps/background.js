@@ -41,69 +41,104 @@ let PageEncoding = (() => {
     // 菜单列表
     let menuMap = {};
 
+    let Storage = {
+        getItem: async function (key) {
+            let object = await chrome.storage.local.get([key]) ?? [];
+            return object?.[key];
+        },
+        removeItem: async function (key) {
+            await chrome.storage.local.remove([key])
+        },
+        setItem: async function (key, value) {
+            await chrome.storage.local.set({[key]: value})
+        }
+    }
+
     /**
      * 创建右键菜单
      */
-    let createMenu = () => {
+    let createMenu = async () => {
 
         contextMenuId = chrome.contextMenus.create({
-            title: "FH-Charset",
+            id: "addone-charset",
+            title: "Charset",
             contexts: ['all'],
             documentUrlPatterns: ['http://*/*', 'https://*/*', 'file://*/*']
         });
 
         chrome.contextMenus.create({
+            id: "addone-charset.all",
             contexts: ["all"],
             title: '检测当前网页字符集',
             parentId: contextMenuId,
-            onclick: (info, tab) => {
-                chrome.tabs.executeScript(tab.id, {code: 'document.charset'}, result => {
-                    alert("当前网页字符集是：" + result);
-                });
-            }
         });
         chrome.contextMenus.create({
+            id: "addone-charset.separator",
             type: 'separator',
             parentId: contextMenuId
         });
 
         // 如果已经在设置页重新设置过字符集，这里则做一个覆盖，负责还原为默认
         let encodingList = Array.from(SystemCharsetList);
-        let customEncodings = JSON.parse(localStorage.getItem('fh-charset-customs') || '[]');
+        let chartsetCustoms = await Storage.getItem('fh-charset-customs') || '[]';
+        let customEncodings = JSON.parse(chartsetCustoms);
         if (customEncodings && customEncodings.length) {
             encodingList = customEncodings;
         } else {
-            localStorage.setItem('fh-charset-customs', JSON.stringify(SystemCharsetList));
+            await Storage.setItem('fh-charset-customs', JSON.stringify(SystemCharsetList));
         }
 
-        resetEncoding.concat(encodingList).forEach(item => {
+        resetEncoding.concat(encodingList).forEach((item, idx) => {
             menuMap[item[0].toUpperCase()] = chrome.contextMenus.create({
+                id: `addone-charset.menu.${item[0]}`,
                 type: "radio",
                 contexts: ["all"],
                 title: item[0] === resetEncoding[0][0] ? resetEncoding[0][1] : `${item[1]}`,
                 checked: false,
                 parentId: contextMenuId,
-                onclick: (info, tab) => {
-                    if (!info.wasChecked || item[0] === resetEncoding[0][0]) {
-                        if (item[0] === resetEncoding[0][0]) {
-                            localStorage.removeItem(ENCODING_PREFIX + tab.id);
-                        } else {
-                            localStorage.setItem(ENCODING_PREFIX + tab.id, item[0]);
-                        }
-                        if (!listenerAddedFlag) {
-                            addOnlineSiteEncodingListener(() => {
-                                chrome.tabs.reload(tab.id, {
-                                    bypassCache: true
-                                });
-                            });
-                        } else {
-                            chrome.tabs.reload(tab.id, {
-                                bypassCache: true
-                            });
-                        }
-                    }
-                }
             });
+        });
+        chrome.contextMenus.onClicked.addListener(async function (info, tab) {
+            let menuItemId = info?.menuItemId;
+            if (menuItemId === "addone-charset.all") {
+                await chrome.scripting.executeScript({
+                    target: {tabId: tab.id},
+                    func: (items) => {
+                        alert(`当前网页字符集是：${document.charset}`)
+                    },
+                    args: [] // pass any parameters to function
+                });
+                return;
+            }
+
+            let result = await chrome.scripting.executeScript({
+                target: {tabId: tab.id},
+                func: () => {
+                    return document.contentType
+                },
+                injectImmediately: false,
+                world: 'MAIN',
+                args: [] // pass any parameters to function
+            })
+            let contentType = result?.[0]?.result;
+
+            let targetEncoding = (() => {
+                let menus = menuItemId.split('.');
+                return menus[menus.length - 1]
+            })();
+
+            if (!info.wasChecked || targetEncoding === resetEncoding[0][0]) {
+                if (targetEncoding === resetEncoding[0][0]) {
+                    await Storage.removeItem(ENCODING_PREFIX + tab.id);
+                } else {
+                    await Storage.setItem(ENCODING_PREFIX + tab.id, targetEncoding);
+                }
+                await addOnlineSiteEncodingListener(contentType, tab.id, () => {
+                    chrome.tabs.reload(tab.id, {
+                        bypassCache: true
+                    });
+                });
+            }
         });
 
     };
@@ -112,10 +147,10 @@ let PageEncoding = (() => {
      * 更新菜单的选中状态
      * @param tabId
      */
-    let updateMenu = (tabId) => {
+    let updateMenu = async (tabId) => {
 
         // 选中它该选中的
-        let encoding = localStorage.getItem(ENCODING_PREFIX + tabId) || '';
+        let encoding = await Storage.getItem(ENCODING_PREFIX + tabId) || '';
         let menuId = menuMap[encoding.toUpperCase()];
 
         Object.keys(menuMap).forEach(menu => {
@@ -126,58 +161,60 @@ let PageEncoding = (() => {
 
     };
 
-
+    const ruleId = 123432;
     /**
      * web请求截获，重置response Headers
      */
-    let addOnlineSiteEncodingListener = (callback) => {
+    let addOnlineSiteEncodingListener = async (contentType, tabId, callback) => {
         listenerAddedFlag = true;
-
-        const options = [
-            chrome.webRequest.OnHeadersReceivedOptions.BLOCKING,
-            chrome.webRequest.OnHeadersReceivedOptions.RESPONSE_HEADERS,
+        let tabEncoding = await Storage.getItem(ENCODING_PREFIX + tabId);
+        let resourceTypes = [
+            "main_frame", "sub_frame",
+            // 'csp_report', 'font', 'image', 'media', 'object', 'other', 'ping', 'script',
+            // 'stylesheet', 'webbundle', 'websocket', 'webtransport', 'xmlhttprequest'
         ];
-        if (chrome.webRequest.OnBeforeSendHeadersOptions.hasOwnProperty('EXTRA_HEADERS')) {
-            options.push(chrome.webRequest.OnHeadersReceivedOptions.EXTRA_HEADERS);
-        }
-        chrome.webRequest.onHeadersReceived.addListener((details) => {
-            let tabEncoding = localStorage.getItem(ENCODING_PREFIX + details.tabId);
+        contentType = (!contentType || !`${contentType}`.trim().length) ? 'text/plain' : contentType;
+        console.log('change', {contentType, tabEncoding, tabId})
 
-            if (tabEncoding) {
-                let i, charsetPattern = /; ?charset=([^;]+)/;
-                for (i = 0; i < details.responseHeaders.length; ++i) {
-                    if (details.responseHeaders[i].name.toLowerCase() === 'content-type') {
-                        let value = details.responseHeaders[i].value.toLowerCase();
-                        if (
-                            value.startsWith('text') ||
-                            value.startsWith('application/javascript') ||
-                            value.startsWith('application/x-javascript') ||
-                            value.startsWith('application/json')
-                        ) {
-                            if (charsetPattern.test(value)) {
-                                value = value.replace(charsetPattern.exec(value)[1], tabEncoding);
-                            } else {
-                                value += value.substr(-1) === ';' ? ' ' : '; ';
-                                value += 'charset=' + tabEncoding;
-                            }
-                            details.responseHeaders[i].value = value;
+        if (tabEncoding) {
+            const rules = {
+                removeRuleIds: [ruleId],
+                addRules: [
+                    {
+                        id: ruleId,
+                        priority: 1,
+                        condition: {
+                            tabIds: [tabId],
+                            urlFilter: "*",
+                            resourceTypes: resourceTypes
+                        },
+                        action: {
+                            type: "modifyHeaders",
+                            responseHeaders: [{
+                                header: "Content-Type",
+                                operation: "set",
+                                value: `${contentType}; charset=${tabEncoding}`
+                            }],
                         }
-                        break;
                     }
+                ],
+            };
+            chrome.declarativeNetRequest.updateSessionRules(rules, () => {
+                if (chrome.runtime.lastError) {
+                    console.error(chrome.runtime.lastError);
+                } else {
+                    chrome.declarativeNetRequest.getSessionRules(rules => console.log('rules', {rules}));
                 }
-                if (i >= details.responseHeaders.length) {
-                    details.responseHeaders.push({
-                        name: 'Content-Type',
-                        value: 'text/plain; charset=' + tabEncoding
-                    });
-                }
-            }
-            return {responseHeaders: details.responseHeaders};
-        }, {urls: ["<all_urls>"]}, options);
+            });
+        } else {
+            await chrome.declarativeNetRequest.updateSessionRules({
+                removeRuleIds: [ruleId],
+            });
+        }
 
         // 标签被关闭时的检测
         chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
-            localStorage.removeItem(ENCODING_PREFIX + tabId);
+            Storage.removeItem(ENCODING_PREFIX + tabId);
         });
         // 标签页有切换时
         chrome.tabs.onActivated.addListener((activeInfo) => {
@@ -192,15 +229,15 @@ let PageEncoding = (() => {
     chrome.runtime.onMessage.addListener(function (request, sender, callback) {
         // 如果发生了错误，就啥都别干了
         if (chrome.runtime.lastError) {
-            console.log(chrome.runtime.lastError);
+            console.log('Error', chrome.runtime.lastError);
             return true;
         }
 
         if (request.type === 'fh-charset-update-menu') {
             if (!contextMenuId) return;
-            chrome.contextMenus.removeAll(() => {
+            chrome.contextMenus.removeAll(async () => {
                 menuMap = {};
-                createMenu();
+                await createMenu();
             });
         }
 
@@ -214,4 +251,6 @@ let PageEncoding = (() => {
 
 })();
 
-PageEncoding.createMenu();
+chrome.runtime.onInstalled.addListener(async () => {
+    await PageEncoding.createMenu();
+});

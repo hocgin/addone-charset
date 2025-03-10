@@ -1,3 +1,9 @@
+## Addone-Charset
+> Fork FH-Charset, 支持 v3 协议
+
+
+<details><summary>Fork FH-Charset</summary>
+
 # FH-Charset
 
 ## 概述
@@ -21,3 +27,5 @@
 ## 反馈
 - 直接提github issue：https://github.com/zxlie/FH-Charset/issues
 - 也可以直接Mail给我：xianliezhao#foxmail.com （`replace # to @`） 
+
+</details>

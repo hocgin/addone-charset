@@ -3,9 +3,8 @@
   "version": "1.0.0",
   "description": "chrome extension",
   "main": "index.js",
-  "dependencies": {},
   "devDependencies": {
-    "gulp": "^3.9.1",
+    "gulp": "^4.0.2",
     "gulp-callback": "0.0.3",
     "gulp-clean": "^0.4.0",
     "gulp-copy": "^1.1.0",
@@ -16,7 +15,6 @@
     "gulp-watch-path": "^0.1.0",
     "gulp-zip": "^4.1.0",
     "pretty-bytes": "^4.0.2",
-    "run-sequence": "^2.2.1",
     "shelljs": "^0.8.1"
   },
   "scripts": {
