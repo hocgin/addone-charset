@@ -76,6 +76,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         id: dwd_firefox
+        if: ${{ env.FIREFOX_APPID }}
         with:
           name: addone-firefox.zip
           path: ./apps
@@ -99,6 +100,7 @@ jobs:
           asset_content_type: application/zip
       - name: Upload Release Asset (firefox)
         uses: actions/upload-release-asset@v1
+        if: ${{ env.FIREFOX_APPID }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
