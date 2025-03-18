@@ -4,6 +4,7 @@
   "version": "2025.03.10",
   "manifest_version": 3,
   "description": "专用于网页编码的修改，支持全世界100多种字符集，比如：UTF-8、GBK、日文、韩文、西文等等！",
+  "homepageUrl": "https://logspot.hocgin.top/addone-charset",
   "icons": {
     "16": "img/fe-16.png",
     "48": "img/fe-48.png",

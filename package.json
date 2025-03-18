@@ -1,5 +1,5 @@
 {
-  "name": "FH-Charset",
+  "name": "addone-charset",
   "version": "1.0.0",
   "description": "chrome extension",
   "main": "index.js",
@@ -31,7 +31,7 @@
   "author": "zhaoxianlie",
   "license": "ISC",
   "bugs": {
-    "url": "https://www.baidufe.com/fehelper/feedback.html"
+    "url": "https://github.com/hocgin/addone-charset"
   },
-  "homepage": "https://www.baidufe.com/fehelper"
+  "homepage": "https://github.com/hocgin/addone-charset"
 }
