@@ -1,0 +1,170 @@
+name: Deploy::Addone
+
+on:
+  workflow_dispatch:
+    inputs:
+      use_cache:
+        description: '是否使用缓存'
+        required: true
+        default: 'true'
+      use_publish:
+        description: '审核通过后是否立即发布'
+        required: true
+        default: 'true'
+  push:
+    tags:
+      - 'v*'
+    paths-ignore:
+      - 'docs/**'
+      - 'scripts/**'
+      - '*.md'
+      - '*.editorconfig'
+      - '*.gitignore'
+
+env:
+  GH_PAT: ${{ secrets.GH_PAT }}
+  KEY_PEM: ${{ secrets.KEY_PEM }}
+  FIREFOX_APPID: ${{ secrets.FIREFOX_APPID }}
+  EDGE_APPID: ${{ secrets.EDGE_APPID }}
+  CHROME_APPID: ${{ secrets.CHROME_APPID }}
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Actions
+        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
+        with:
+          repository: hocgin/.github
+          path: .templates
+          token: ${{ env.GH_PAT }}
+      - id: prep
+        uses: hocgin/action-env@main
+      - name: Rename Version
+        uses: "./.templates/actions/rename-pkg-version"
+        with:
+          FILE: ./package.json
+          NEW_VERSION: ${{ steps.prep.outputs.version_number }}
+      - uses: "./.templates/actions/pack-addone-chrome"
+        id: pack_chrome
+        with:
+          KEY_PEM: ${{ env.KEY_PEM }}
+          DIST_DIR: ./apps
+      - uses: actions/upload-artifact@v4
+        if: ${{ steps.pack_chrome.outputs.PACK_FILE }}
+        with:
+          name: addone-chrome.zip
+          path: ${{ steps.pack_chrome.outputs.PACK_FILE }}
+
+      - uses: "./.templates/actions/pack-addone-firefox"
+        id: pack_firefox
+        if: ${{ env.FIREFOX_APPID }}
+        with:
+          KEY_PEM: ${{ env.KEY_PEM }}
+          DIST_DIR: ./apps
+          APPID: ${{ env.FIREFOX_APPID }}
+      - uses: actions/upload-artifact@v4
+        if: ${{ steps.pack_firefox.outputs.PACK_FILE }}
+        with:
+          name: addone-firefox.zip
+          path: ${{ steps.pack_firefox.outputs.PACK_FILE }}
+  publish-github-artifact:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        id: dwd_firefox
+        if: ${{ env.FIREFOX_APPID }}
+        with:
+          name: addone-firefox.zip
+          path: ./apps
+      - uses: actions/download-artifact@v4
+        id: dwd_chrome
+        with:
+          name: addone-chrome.zip
+          path: ./apps
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+      - name: Upload Release Asset (chrome)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps
+          asset_path: ./apps/plugin.zip
+          asset_name: ${{github.event.repository.name}}-chrome.zip
+          asset_content_type: application/zip
+      - name: Upload Release Asset (firefox)
+        uses: actions/upload-release-asset@v1
+        if: ${{ env.FIREFOX_APPID }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps
+          asset_path: ./apps/plugin.zip
+          asset_name: ${{github.event.repository.name}}-firefox.zip
+          asset_content_type: application/zip
+  publish-chrome-store:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: hocgin/.github
+          path: .templates
+          token: ${{ env.GH_PAT }}
+      - uses: actions/download-artifact@v4
+        id: dwd_chrome
+        with:
+          name: addone-chrome.zip
+          path: ./apps
+      - uses: "./.templates/actions/deploy-addone-chrome"
+        with:
+          FILE: $./apps/plugin.zip
+          APPID: ${{ env.CHROME_APPID }}
+          TOKEN: ${{ env.GH_PAT }}
+          PUBLISH: ${{ github.event.inputs.use_publish != 'false' }}
+  publish-edge-store:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: hocgin/.github
+          path: .templates
+          token: ${{ env.GH_PAT }}
+      - uses: actions/download-artifact@v4
+        id: dwd_chrome
+        with:
+          name: addone-chrome.zip
+          path: ./apps
+      - uses: "./.templates/actions/deploy-addone-edge"
+        with:
+          FILE: ./apps/plugin.zip
+          APPID: ${{ env.EDGE_APPID }}
+          TOKEN: ${{ env.GH_PAT }}
+          PUBLISH: ${{ github.event.inputs.use_publish != 'false' }}
+  publish-firefox-store:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: hocgin/.github
+          path: .templates
+          token: ${{ env.GH_PAT }}
+      - uses: actions/download-artifact@v4
+        id: dwd_firefox
+        with:
+          path: ./apps
+          name: addone-firefox.zip
+      - uses: "./.templates/actions/deploy-addone-firefox"
+        with:
+          FILE: ./apps/plugin.zip
+          APPID: ${{ env.FIREFOX_APPID }}
+          TOKEN: ${{ env.GH_PAT }}
+          PUBLISH: ${{ github.event.inputs.use_publish != 'false' }}

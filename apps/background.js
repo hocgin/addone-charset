@@ -252,3 +252,7 @@ chrome.contextMenus.onClicked.addListener(async function (info, tab) {
         });
     }
 });
+
+chrome.runtime.onInstalled.addListener(async (details) => {
+    chrome.tabs.create({url: "https://logspot.hocgin.top/addone-charset"});
+});
